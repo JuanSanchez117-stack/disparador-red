@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16202A">
+<title>Disparador de red</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+  /* Layout: una sola columna de mando; el botón va al centro sobre una malla en rombos, como la red de 20 × 20 cm */
+  :root {
+    --bg: #E9EEF2;
+    --panel: #FFFFFF;
+    --ink: #142029;
+    --muted: #586774;
+    --line: #CED7DF;
+    --mesh: #DCE3E9;
+    --signal: #E3A000;
+    --signal-ink: #1C1400;
+    --signal-soft: #F6E7BC;
+    --ok: #1B8A57;
+    --bad: #BE3A2B;
+    --off: #C3CCD4;
+    --f-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+    --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --f-data: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0E151B; --panel: #16202A; --ink: #E4EAEF; --muted: #8D9AA6;
+      --line: #273643; --mesh: #1D2934; --signal: #F2B630; --signal-ink: #1C1400;
+      --signal-soft: #3A2F12; --ok: #3BC58A; --bad: #FF6A58; --off: #33414E;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0E151B; --panel: #16202A; --ink: #E4EAEF; --muted: #8D9AA6;
+    --line: #273643; --mesh: #1D2934; --signal: #F2B630; --signal-ink: #1C1400;
+    --signal-soft: #3A2F12; --ok: #3BC58A; --bad: #FF6A58; --off: #33414E;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 400 16px/1.45 var(--f-body);
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .marco {
+    max-width: 460px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 16px 28px;
+    display: grid;
+    gap: 14px;
+  }
+
+  /* Encabezado */
+  .cabecera { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .nombre h1 {
+    margin: 0;
+    font: 700 1.75rem/1 var(--f-display);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+  .nombre p { margin: 4px 0 0; color: var(--muted); font: 500 0.78rem/1.2 var(--f-data); overflow-wrap: anywhere; }
+  .pastilla {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--panel);
+    font: 600 0.82rem/1 var(--f-body);
+    white-space: nowrap;
+  }
+  .punto { width: 9px; height: 9px; border-radius: 50%; background: var(--off); flex: none; }
+  .pastilla[data-tono="ok"] .punto { background: var(--ok); }
+  .pastilla[data-tono="bad"] .punto { background: var(--bad); }
+  .pastilla[data-tono="warn"] .punto { background: var(--signal); }
+
+  /* Campo de disparo con malla */
+  .campo {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background-color: var(--panel);
+    background-image:
+      repeating-linear-gradient(45deg, var(--mesh) 0 1px, transparent 1px 22px),
+      repeating-linear-gradient(-45deg, var(--mesh) 0 1px, transparent 1px 22px);
+    padding-block: 34px 26px;
+    display: grid;
+    justify-items: center;
+    gap: 18px;
+  }
+  .anillo {
+    --p: 0;
+    width: min(68vw, 248px);
+    aspect-ratio: 1;
+    max-width: 100%;
+    border-radius: 50%;
+    padding: 10px;
+    background: conic-gradient(var(--signal) calc(var(--p) * 360deg), var(--line) 0);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .disparar {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    overflow: hidden;
+    border: 6px solid var(--panel);
+    border-radius: 50%;
+    background: var(--off);
+    color: var(--muted);
+    display: grid;
+    place-content: center;
+    gap: 4px;
+    text-align: center;
+    cursor: not-allowed;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.2s, transform 0.12s;
+  }
+  .disparar .verbo { font: 700 clamp(1.8rem, 9vw, 2.6rem)/0.95 var(--f-display); letter-spacing: 0.04em; text-transform: uppercase; }
+  .disparar .ayuda { font: 500 0.82rem/1.2 var(--f-body); padding-inline: 18px; }
+  .disparar:not(:disabled) { background: var(--signal); color: var(--signal-ink); cursor: pointer; }
+  .disparar.sosteniendo { transform: scale(0.97); }
+  .disparar:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; }
+  .regla { margin: 0; color: var(--muted); font-size: 0.86rem; text-align: center; padding-inline: 20px; }
+
+  /* Lecturas */
+  .lecturas {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
+  }
+  .lectura { padding: 10px 12px; min-width: 0; }
+  .lectura + .lectura { border-left: 1px solid var(--line); }
+  .lectura dt { color: var(--muted); font: 600 0.7rem/1.2 var(--f-body); letter-spacing: 0.08em; text-transform: uppercase; }
+  .lectura dd { margin: 4px 0 0; font: 500 1.05rem/1.2 var(--f-data); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lectura dd small { color: var(--muted); font-size: 0.75rem; }
+  .lectura dd.alto { color: var(--bad); }
+
+  .mensaje {
+    margin: 0;
+    min-height: 1.45em;
+    padding-inline: 4px;
+    font-weight: 500;
+  }
+  .mensaje[data-tono="ok"] { color: var(--ok); }
+  .mensaje[data-tono="bad"] { color: var(--bad); }
+
+  /* Ajustes */
+  details {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--panel);
+  }
+  summary {
+    cursor: pointer;
+    padding: 12px 14px;
+    font-weight: 600;
+    list-style-position: inside;
+  }
+  summary:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; border-radius: 12px; }
+  .ajustes { display: grid; gap: 12px; padding: 0 14px 14px; }
+  .ajustes label { display: grid; gap: 4px; font-size: 0.86rem; font-weight: 600; }
+  .ajustes input {
+    width: 100%;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--ink);
+    font: 500 0.92rem/1.2 var(--f-data);
+  }
+  .ajustes input:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+  .fila-clave { display: flex; gap: 8px; }
+  .fila-clave input { flex: 1; }
+  .boton-sec, .guardar {
+    border-radius: 10px;
+    font: 600 0.9rem/1 var(--f-body);
+    padding: 11px 14px;
+    cursor: pointer;
+  }
+  .boton-sec { border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  .guardar { border: 0; background: var(--ink); color: var(--panel); }
+  .boton-sec:focus-visible, .guardar:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  .nota { margin: 0; color: var(--muted); font-size: 0.8rem; }
+  .nota code { font-family: var(--f-data); font-size: 0.78rem; overflow-wrap: anywhere; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .disparar { transition: none; }
+    .disparar.sosteniendo { transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="marco">
+
+  <header class="cabecera">
+    <div class="nombre">
+      <h1>Disparador de red</h1>
+      <p id="idVisible">—</p>
+    </div>
+    <span class="pastilla" id="pastilla" data-tono="off" role="status">
+      <span class="punto" aria-hidden="true"></span>
+      <span id="pastillaTexto">Conectando…</span>
+    </span>
+  </header>
+
+  <main class="campo">
+    <div class="anillo" id="anillo">
+      <button class="disparar" id="disparar" type="button" disabled aria-describedby="regla">
+        <span class="verbo" id="verbo">Espera</span>
+        <span class="ayuda" id="ayuda">Conectando al servidor</span>
+      </button>
+    </div>
+    <p class="regla" id="regla">Mantén presionado 1,5 s hasta cerrar el anillo. Si sueltas antes, no se envía nada.</p>
+  </main>
+
+  <dl class="lecturas">
+    <div class="lectura"><dt>Salida PWM</dt><dd id="lecSalida">—</dd></div>
+    <div class="lectura"><dt>Disparos</dt><dd id="lecDisparos">—</dd></div>
+    <div class="lectura"><dt>Señal Wi-Fi</dt><dd id="lecRssi">—</dd></div>
+  </dl>
+
+  <p class="mensaje" id="mensaje" aria-live="polite"></p>
+
+  <details id="panelAjustes">
+    <summary>Ajustes de conexión</summary>
+    <form class="ajustes" id="formAjustes" novalidate>
+      <label for="inServidor">Servidor MQTT (WebSocket seguro)
+        <input id="inServidor" type="url" inputmode="url" autocomplete="off" spellcheck="false">
+      </label>
+      <label for="inId">ID del lanzador (igual que en el ESP32)
+        <input id="inId" type="text" autocomplete="off" spellcheck="false">
+      </label>
+      <label for="inClave">Clave (igual que CLAVE_SECRETA en el ESP32)
+        <span class="fila-clave">
+          <input id="inClave" type="password" autocomplete="off" spellcheck="false">
+          <button class="boton-sec" id="verClave" type="button" aria-pressed="false">Ver</button>
+        </span>
+      </label>
+      <button class="guardar" type="submit">Guardar y reconectar</button>
+      <p class="nota">Se guardan solo en este celular. Tema de órdenes: <code id="temaVisible">—</code></p>
+    </form>
+  </details>
+
+</div>
+
+<script>
+/* ============================================================
+   Configuración inicial (se puede cambiar desde "Ajustes").
+   No escribas la clave aquí si vas a publicar este archivo en
+   internet: cualquiera podría leerla. Escríbela en Ajustes.
+   ============================================================ */
+const POR_DEFECTO = {
+  servidor: "wss://broker.emqx.io:8084/mqtt",
+  id: "lanzador-cambiame-01",
+  clave: ""
+};
+const MANTENER_MS = 1500;
+const ESPERA_RESPUESTA_MS = 5000;
+const FUENTES_MQTT = [
+  "https://cdn.jsdelivr.net/npm/mqtt@5.15.2/dist/mqtt.min.js",
+  "https://unpkg.com/mqtt@5.15.2/dist/mqtt.min.js"
+];
+const CLAVE_ALMACEN = "disparador-red-ajustes";
+
+/* ---------- <hmac> HMAC-SHA256 en JavaScript puro ---------- */
+const K256 = new Uint32Array([
+  0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+  0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+  0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+  0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+  0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+  0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+  0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+  0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+]);
+function sha256(datos) {
+  const largo = datos.length;
+  const total = ((largo + 9 + 63) >> 6) << 6;
+  const b = new Uint8Array(total);
+  b.set(datos);
+  b[largo] = 0x80;
+  const dv = new DataView(b.buffer);
+  const bits = largo * 8;
+  dv.setUint32(total - 8, Math.floor(bits / 0x100000000));
+  dv.setUint32(total - 4, bits >>> 0);
+  const H = new Uint32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);
+  const W = new Uint32Array(64);
+  for (let o = 0; o < total; o += 64) {
+    for (let i = 0; i < 16; i++) W[i] = dv.getUint32(o + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const x = W[i - 15], y = W[i - 2];
+      const s0 = ((x >>> 7) | (x << 25)) ^ ((x >>> 18) | (x << 14)) ^ (x >>> 3);
+      const s1 = ((y >>> 17) | (y << 15)) ^ ((y >>> 19) | (y << 13)) ^ (y >>> 10);
+      W[i] = (W[i - 16] + s0 + W[i - 7] + s1) | 0;
+    }
+    let a = H[0], c1 = H[1], c2 = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+    for (let i = 0; i < 64; i++) {
+      const S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
+      const ch = (e & f) ^ (~e & g);
+      const t1 = (h + S1 + ch + K256[i] + W[i]) | 0;
+      const S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
+      const mj = (a & c1) ^ (a & c2) ^ (c1 & c2);
+      const t2 = (S0 + mj) | 0;
+      h = g; g = f; f = e; e = (d + t1) | 0; d = c2; c2 = c1; c1 = a; a = (t1 + t2) | 0;
+    }
+    H[0] += a; H[1] += c1; H[2] += c2; H[3] += d; H[4] += e; H[5] += f; H[6] += g; H[7] += h;
+  }
+  const out = new Uint8Array(32);
+  const odv = new DataView(out.buffer);
+  for (let i = 0; i < 8; i++) odv.setUint32(i * 4, H[i]);
+  return out;
+}
+function hmacSha256Hex(claveTexto, mensajeTexto) {
+  const enc = new TextEncoder();
+  let k = enc.encode(claveTexto);
+  if (k.length > 64) k = sha256(k);
+  const bloque = new Uint8Array(64);
+  bloque.set(k);
+  const interno = new Uint8Array(64), externo = new Uint8Array(64);
+  for (let i = 0; i < 64; i++) { interno[i] = bloque[i] ^ 0x36; externo[i] = bloque[i] ^ 0x5c; }
+  const msg = enc.encode(mensajeTexto);
+  const a = new Uint8Array(64 + msg.length); a.set(interno); a.set(msg, 64);
+  const hi = sha256(a);
+  const b = new Uint8Array(96); b.set(externo); b.set(hi, 64);
+  return Array.from(sha256(b), x => x.toString(16).padStart(2, "0")).join("");
+}
+/* ---------- </hmac> ---------- */
+
+/* ---------- Estado de la app ---------- */
+const $ = id => document.getElementById(id);
+const ui = {
+  pastilla: $("pastilla"), pastillaTexto: $("pastillaTexto"), idVisible: $("idVisible"),
+  anillo: $("anillo"), boton: $("disparar"), verbo: $("verbo"), ayuda: $("ayuda"),
+  salida: $("lecSalida"), disparos: $("lecDisparos"), rssi: $("lecRssi"),
+  mensaje: $("mensaje"), panel: $("panelAjustes"), form: $("formAjustes"),
+  inServidor: $("inServidor"), inId: $("inId"), inClave: $("inClave"),
+  verClave: $("verClave"), tema: $("temaVisible")
+};
+
+let ajustes = cargarAjustes();
+let cliente = null;
+let servidor = "conectando";      // conectando | ok | caido | error
+let lanzador = null;              // último estado publicado por el ESP32
+let pendiente = null;             // orden enviada esperando confirmación
+let tPendiente = null;
+let temaEstado = "", temaCmd = "";
+let inicioPresion = null, rafId = null;
+
+function cargarAjustes() {
+  try {
+    const guardado = JSON.parse(localStorage.getItem(CLAVE_ALMACEN) || "null");
+    if (guardado && typeof guardado === "object") return { ...POR_DEFECTO, ...guardado };
+  } catch (_) {}
+  return { ...POR_DEFECTO };
+}
+function guardarAjustes() {
+  try { localStorage.setItem(CLAVE_ALMACEN, JSON.stringify(ajustes)); } catch (_) {}
+}
+function hora() {
+  return new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+function mensaje(texto, tono) {
+  ui.mensaje.textContent = texto || "";
+  if (tono) ui.mensaje.dataset.tono = tono; else delete ui.mensaje.dataset.tono;
+}
+function vibrar(patron) {
+  try { if (navigator.vibrate) navigator.vibrate(patron); } catch (_) {}
+}
+
+/* ---------- Lógica de habilitación ---------- */
+function puedeDisparar() {
+  return servidor === "ok" && !!lanzador && lanzador.online === true &&
+         lanzador.listo === true && !!lanzador.nonce && !pendiente && !!ajustes.clave;
+}
+
+function render() {
+  // Pastilla de estado
+  let tono = "off", texto = "Conectando…";
+  if (servidor === "error") { tono = "bad"; texto = "Sin librería MQTT"; }
+  else if (servidor === "caido") { tono = "bad"; texto = "Sin servidor"; }
+  else if (servidor === "conectando") { tono = "off"; texto = "Conectando…"; }
+  else if (!lanzador) { tono = "off"; texto = "Esperando lanzador"; }
+  else if (lanzador.online !== true) { tono = "bad"; texto = "Lanzador fuera de línea"; }
+  else if (lanzador.armado === false) { tono = "warn"; texto = "Desarmado"; }
+  else if (lanzador.listo !== true) { tono = "warn"; texto = "Enfriando"; }
+  else { tono = "ok"; texto = "Listo"; }
+  ui.pastilla.dataset.tono = tono;
+  ui.pastillaTexto.textContent = texto;
+
+  // Botón
+  const habilitado = puedeDisparar();
+  if (!habilitado && inicioPresion !== null) limpiarPresion();
+  ui.boton.disabled = !habilitado;
+  let verbo = "Espera", ayuda = texto;
+  if (pendiente) { verbo = "Enviando"; ayuda = "Esperando confirmación"; }
+  else if (!ajustes.clave) { verbo = "Sin clave"; ayuda = "Escríbela en Ajustes de conexión"; }
+  else if (habilitado) { verbo = "Disparar"; ayuda = "Mantén 1,5 s"; }
+  else if (servidor === "ok" && lanzador && lanzador.online === true && lanzador.armado === false) {
+    ayuda = "Cierra el interruptor de armado";
+  }
+  else if (servidor === "ok" && lanzador && lanzador.online !== true) {
+    ayuda = "Revisa el Wi-Fi del ESP32";
+  }
+  ui.verbo.textContent = verbo;
+  ui.ayuda.textContent = ayuda;
+
+  // Lecturas
+  const enLinea = lanzador && lanzador.online === true;
+  if (enLinea && Number.isFinite(lanzador.salida_us)) {
+    ui.salida.innerHTML = `${lanzador.salida_us} <small>µs</small>`;
+    ui.salida.classList.toggle("alto", lanzador.salida_us >= 1900);
+  } else {
+    ui.salida.textContent = "—";
+    ui.salida.classList.remove("alto");
+  }
+  ui.disparos.textContent = enLinea && Number.isFinite(lanzador.disparos) ? String(lanzador.disparos) : "—";
+  ui.rssi.innerHTML = enLinea && Number.isFinite(lanzador.rssi) ? `${lanzador.rssi} <small>dBm</small>` : "—";
+
+  ui.idVisible.textContent = ajustes.id;
+  ui.tema.textContent = temaCmd || "—";
+}
+
+/* ---------- MQTT ---------- */
+function cargarScript(src) {
+  return new Promise((ok, falla) => {
+    const s = document.createElement("script");
+    s.src = src; s.async = true;
+    s.onload = () => ok(); s.onerror = () => falla(new Error(src));
+    document.head.appendChild(s);
+  });
+}
+async function cargarMqtt() {
+  if (window.mqtt) return true;
+  for (const src of FUENTES_MQTT) {
+    try { await cargarScript(src); if (window.mqtt) return true; } catch (_) {}
+  }
+  return false;
+}
+
+function conectar() {
+  if (cliente) { try { cliente.end(true); } catch (_) {} cliente = null; }
+  lanzador = null;
+  pendiente = null;
+  servidor = "conectando";
+  const base = "lanzador-red/" + ajustes.id;
+  temaEstado = base + "/estado";
+  temaCmd = base + "/cmd";
+  render();
+
+  const idCliente = "app-" + Math.random().toString(16).slice(2, 10);
+  try {
+    cliente = window.mqtt.connect(ajustes.servidor, {
+      clientId: idCliente, clean: true, keepalive: 30,
+      connectTimeout: 6000, reconnectPeriod: 3000
+    });
+  } catch (err) {
+    servidor = "caido";
+    mensaje("La dirección del servidor no es válida. Debe empezar por wss://", "bad");
+    render();
+    return;
+  }
+
+  cliente.on("connect", () => {
+    servidor = "ok";
+    cliente.subscribe(temaEstado, { qos: 1 });
+    if (ui.mensaje.dataset.tono === "bad") mensaje("");
+    render();
+  });
+  cliente.on("reconnect", () => { servidor = "conectando"; render(); });
+  cliente.on("offline", () => { servidor = "caido"; render(); });
+  cliente.on("close", () => { if (servidor === "ok") { servidor = "caido"; render(); } });
+  cliente.on("error", err => {
+    servidor = "caido";
+    mensaje("Error del servidor: " + (err && err.message ? err.message : "desconocido"), "bad");
+    render();
+  });
+  cliente.on("message", (tema, carga) => {
+    if (tema !== temaEstado) return;
+    let e;
+    try { e = JSON.parse(carga.toString()); } catch (_) { return; }
+    alEstado(e);
+  });
+}
+
+function alEstado(e) {
+  lanzador = e;
+  if (pendiente) {
+    if (Number.isFinite(e.disparos) && e.disparos > pendiente.disparos) {
+      terminarPendiente();
+      mensaje("Disparo confirmado a las " + hora() + ".", "ok");
+      vibrar([60, 60, 140]);
+    } else if (e.evento === "rechazado") {
+      terminarPendiente();
+      mensaje("El lanzador rechazó la orden: la clave de la app no coincide con la del ESP32.", "bad");
+    } else if (e.evento === "desarmado") {
+      terminarPendiente();
+      mensaje("No se disparó: el interruptor de armado está abierto.", "bad");
+    } else if (e.evento === "ocupado") {
+      terminarPendiente();
+      mensaje("No se disparó: hubo un disparo hace menos de 5 s.", "bad");
+    } else if (e.online === false) {
+      terminarPendiente();
+      mensaje("El lanzador se desconectó antes de confirmar.", "bad");
+    }
+  }
+  render();
+}
+
+function terminarPendiente() {
+  pendiente = null;
+  clearTimeout(tPendiente);
+}
+
+function enviarDisparo() {
+  if (!puedeDisparar()) return;
+  const nonce = lanzador.nonce;
+  const firma = hmacSha256Hex(ajustes.clave, nonce + "|disparar");
+  pendiente = { disparos: Number.isFinite(lanzador.disparos) ? lanzador.disparos : 0 };
+  cliente.publish(temaCmd, JSON.stringify({ accion: "disparar", nonce, firma }), { qos: 1 }, err => {
+    if (err) {
+      terminarPendiente();
+      mensaje("No se pudo enviar la orden: " + err.message, "bad");
+      render();
+    }
+  });
+  mensaje("Orden enviada. Esperando confirmación del lanzador…");
+  vibrar(40);
+  tPendiente = setTimeout(() => {
+    if (!pendiente) return;
+    terminarPendiente();
+    mensaje("El lanzador no respondió en 5 s. Revisa su conexión antes de reintentar.", "bad");
+    render();
+  }, ESPERA_RESPUESTA_MS);
+  render();
+}
+
+/* ---------- Mantener presionado ---------- */
+function empezarPresion() {
+  if (!puedeDisparar() || inicioPresion !== null) return;
+  inicioPresion = performance.now();
+  ui.boton.classList.add("sosteniendo");
+  vibrar(15);
+  rafId = requestAnimationFrame(avanzar);
+}
+function avanzar(ahora) {
+  if (inicioPresion === null) return;
+  const p = Math.min(1, (ahora - inicioPresion) / MANTENER_MS);
+  ui.anillo.style.setProperty("--p", p.toFixed(3));
+  if (p >= 1) {
+    limpiarPresion();
+    enviarDisparo();
+    return;
+  }
+  rafId = requestAnimationFrame(avanzar);
+}
+function limpiarPresion() {
+  inicioPresion = null;
+  cancelAnimationFrame(rafId);
+  ui.anillo.style.setProperty("--p", 0);
+  ui.boton.classList.remove("sosteniendo");
+}
+function soltarAntes() {
+  if (inicioPresion === null) return;
+  limpiarPresion();
+  mensaje("Soltaste antes de cerrar el anillo. No se envió nada.");
+}
+
+ui.boton.addEventListener("pointerdown", e => {
+  if (ui.boton.disabled) return;
+  e.preventDefault();
+  try { ui.boton.setPointerCapture(e.pointerId); } catch (_) {}
+  empezarPresion();
+});
+ui.boton.addEventListener("pointerup", soltarAntes);
+ui.boton.addEventListener("pointercancel", soltarAntes);
+ui.boton.addEventListener("lostpointercapture", soltarAntes);
+ui.boton.addEventListener("contextmenu", e => e.preventDefault());
+ui.boton.addEventListener("keydown", e => {
+  if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); empezarPresion(); }
+});
+ui.boton.addEventListener("keyup", e => {
+  if (e.key === " " || e.key === "Enter") { e.preventDefault(); soltarAntes(); }
+});
+ui.boton.addEventListener("blur", soltarAntes);
+document.addEventListener("visibilitychange", () => { if (document.hidden) soltarAntes(); });
+
+/* ---------- Ajustes ---------- */
+function llenarAjustes() {
+  ui.inServidor.value = ajustes.servidor;
+  ui.inId.value = ajustes.id;
+  ui.inClave.value = ajustes.clave;
+}
+ui.verClave.addEventListener("click", () => {
+  const ver = ui.inClave.type === "password";
+  ui.inClave.type = ver ? "text" : "password";
+  ui.verClave.textContent = ver ? "Ocultar" : "Ver";
+  ui.verClave.setAttribute("aria-pressed", String(ver));
+});
+ui.form.addEventListener("submit", e => {
+  e.preventDefault();
+  const servidorNuevo = ui.inServidor.value.trim();
+  const idNuevo = ui.inId.value.trim();
+  const claveNueva = ui.inClave.value;
+  if (!/^wss?:\/\//i.test(servidorNuevo)) { mensaje("El servidor debe empezar por wss:// (o ws://).", "bad"); ui.inServidor.focus(); return; }
+  if (!idNuevo) { mensaje("Escribe el ID del lanzador, el mismo de ID_LANZADOR en el ESP32.", "bad"); ui.inId.focus(); return; }
+  if (!claveNueva) { mensaje("Escribe la clave, la misma de CLAVE_SECRETA en el ESP32.", "bad"); ui.inClave.focus(); return; }
+  ajustes = { servidor: servidorNuevo, id: idNuevo, clave: claveNueva };
+  guardarAjustes();
+  ui.panel.open = false;
+  mensaje("Ajustes guardados. Reconectando…");
+  if (window.mqtt) conectar();
+});
+
+/* ---------- Arranque ---------- */
+(async function iniciar() {
+  llenarAjustes();
+  if (!ajustes.clave) {
+    ui.panel.open = true;
+    mensaje("Escribe la clave del lanzador en Ajustes para habilitar el botón.");
+  }
+  render();
+  const ok = await cargarMqtt();
+  if (!ok) {
+    servidor = "error";
+    mensaje("No se pudo cargar la librería MQTT. Revisa la conexión a internet y recarga la página.", "bad");
+    render();
+    return;
+  }
+  conectar();
+})();
+</script>
+</body>
+</html>
